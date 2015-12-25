@@ -3,6 +3,7 @@
 # Hafiz Shafruddin Dec 2015
 # gmhafiz@gmail.com 
 # www.gmhafiz.com
+# github.com/gmhafiz
 #
 # Search gumtree australia for specific keyword and send email 
 # notification if found.
@@ -16,8 +17,11 @@ my $email = 'gmhafiz@gmail.com';
 my $keyword = $ARGV[0];
 my $base_url =  "http://www.gumtree.com.au";
 my $url = "$base_url/s-$keyword/k0?fromSearchBox=true";
+my $content = "";
 my $message = "";
+my $new_ad = "";
 my $db_name = ".gumtree.db";
+my $new_ad_found = 0;
 
 my $dbh = DBI->connect(
 	"dbi:SQLite:dbname=.gumtree.db",
@@ -59,6 +63,7 @@ sub main {
 			my $name 	 = $array_1[4];
 			my $id       = $array_1[5];
 			$id          =~ s/\">//;
+			$id			 =~ s/\" data-ref=\"searchTopAd//;
 			$message .= "Name: $name\nLocation: $location\nId: $id" . 
 						"url: $base_url" . "$item_url\n\n";
 			$num += 1;
@@ -74,8 +79,11 @@ sub main {
 			}
 			
 			if (!$existed) {
+				$new_ad_found = 1;
 				$dbh->do("INSERT INTO Items VALUES($id, '$name', 
-									'$location', '$item_url')");	
+									'$location', '$item_url')");
+				$new_ad .= "Name: $name\nLocation: $location\nId: $id" . 
+						"url: $base_url" . "$item_url\n\n";
 			}
 			# TODO: delete removed advertisement from database
 		}
@@ -87,24 +95,38 @@ sub main {
 		if ($num == 0) {
 			print "No result found\n";
 		} elsif ($num == 1) {
-			print "$num result found\n\n";	
+			print "$num result found\n";	
 		} else {
-			print "$num results found\n\n";
+			print "$num results found\n";
 		}
-		print "$message\n" . "sending email...\n";
-		send_email();
-		print "..done\n";
-		print "waiting for another hour for another query...\n";
+		if ($new_ad_found) {
+			print "$message\n" . "sending email...\n";
+			send_email();
+			print "..done\n";	
+		} else {
+			print "But not new results.\n";
+		}
+		
+		print "Waiting for another hour for another query...\n";
 	}
 	sleep 3600;
 	close F;
-	$dbh->disconnect;
+	
 	main();
 }
 
 main();
 
 sub send_email {
-	my $name = "New search result on gumtree found";
-	system("echo '$message'|mutt -s '$name' -- $email")
+	my $subject = "New search result on gumtree found";
+	$content .= "New ad: \n$new_ad\n\n";
+	$content .= "Total: \n$message\n\n";
+	# system("echo '$new_ad' '$content'|mutt -s '$name' -- $email")
+	system("echo '$new_ad' |mutt -s '$subject' -- $email");
+	
+	# Clear all values
+	$new_ad  = "";
+	$message = "";
+	$content = "";
+	$new_ad_found = 0;
 }
